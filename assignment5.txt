@@ -1,0 +1,115 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import networkx as nx
+import argparse
+from matplotlib.animation import FuncAnimation
+
+
+def initialize_opinions(num_nodes):
+    return np.random.choice([-1, 1], size=num_nodes)
+
+
+def simulate_ising_model(network, num_iterations):
+    num_nodes = network.number_of_nodes()
+    opinions = initialize_opinions(num_nodes)
+    mean_opinion = []
+
+    for _ in range(num_iterations):
+        mean_opinion.append(np.mean(opinions))
+
+        node = np.random.choice(list(network.nodes()))
+        neighbors = list(network.neighbors(node))
+
+        total_opinion = opinions[node]
+        for neighbor in neighbors:
+            total_opinion += opinions[neighbor]
+
+        average_opinion = total_opinion / (len(neighbors) + 1)
+
+        if average_opinion > 0:
+            opinions[node] = 1
+        elif average_opinion < 0:
+            opinions[node] = -1
+
+    return opinions, mean_opinion
+
+
+def simulate_defuant_model(network, num_iterations, threshold):
+    num_nodes = network.number_of_nodes()
+    opinions = initialize_opinions(num_nodes)
+    mean_opinion = []
+
+    for _ in range(num_iterations):
+        mean_opinion.append(np.mean(opinions))
+
+        node = np.random.choice(list(network.nodes()))
+        neighbors = list(network.neighbors(node))
+
+        if len(neighbors) > 0:
+            neighbor_indices = np.random.choice(neighbors, size=int(len(neighbors) / 2), replace=False)
+            neighbor_opinions = opinions[neighbor_indices]
+
+            disagreement_count = np.sum(np.abs(neighbor_opinions - opinions[node]) > threshold)
+            disagreement_fraction = disagreement_count / len(neighbor_indices)
+
+            if disagreement_fraction > 0:
+                new_opinion = np.mean(neighbor_opinions[np.abs(neighbor_opinions - opinions[node]) > threshold])
+                opinions[node] = new_opinion
+
+    return opinions, mean_opinion
+
+
+def plot_opinion_evolution(mean_opinion):
+    plt.plot(mean_opinion)
+    plt.xlabel('Iterations')
+    plt.ylabel('Mean Opinion')
+    plt.title('Opinion Evolution')
+    plt.show()
+
+
+def animate_opinions(opinions, network):
+    fig, ax = plt.subplots()
+    pos = nx.spring_layout(network)
+    nodes = nx.draw_networkx_nodes(network, pos, node_color=opinions, cmap=plt.cm.PiYG, node_size=100)
+    edges = nx.draw_networkx_edges(network, pos)
+
+    def update(i):
+        ax.clear()
+        new_opinions, _ = simulate_ising_model(network, 1)
+        nodes.set_array(new_opinions)
+        nx.draw_networkx_nodes(network, pos, node_color=new_opinions, cmap=plt.cm.PiYG, node_size=100, ax=ax)
+        nx.draw_networkx_edges(network, pos, ax=ax)
+        ax.set_title(f'Opinions at Iteration {i + 1}')
+
+    anim = FuncAnimation(fig, update, frames=range(20), interval=500)
+    plt.show()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-ising_model', action='store_true', help='Run Ising Model')
+    parser.add_argument('-defuant', action='store_true', help='Run Defuant Model')
+    parser.add_argument('-use_network', type=int, help='Size of the network')
+    args = parser.parse_args()
+
+    if args.use_network:
+        network_size = args.use_network
+        if network_size > 0:
+            network = nx.connected_watts_strogatz_graph(network_size, 4, 0.2)
+        else:
+            network = nx.random_regular_graph(4, abs(network_size))
+    else:
+        # Default to using a grid array
+        network_size = 10
+        network = nx.grid_2d_graph(network_size, network_size)
+
+    if args.ising_model:
+        opinions, mean_opinion = simulate_ising_model(network, 100)
+        animate_opinions(opinions, network)
+        plot_opinion_evolution(mean_opinion)
+    elif args.defuant:
+        opinions, mean_opinion = simulate_defuant_model(network, 100, 0.5)
+        animate_opinions(opinions, network)
+        plot_opinion_evolution(mean_opinion)
+##python assignment.py -ising_model -use_network 10
+##python assignment.py -defuant -use_network 10
